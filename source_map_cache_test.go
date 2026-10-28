@@ -4,7 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -66,6 +70,52 @@ func TestWritesSimpleCache(t *testing.T) {
 	assert.Equal(t, 2, token.Line)
 	assert.Equal(t, 10, token.Col)
 	assert.Equal(t, "function abcd() {}\n", token.ContextLine)
+}
+
+func residentMemory(t *testing.T) int64 {
+	status, err := os.ReadFile("/proc/self/status")
+	assert.NoError(t, err)
+	for _, line := range strings.Split(string(status), "\n") {
+		if strings.HasPrefix(line, "VmRSS:") {
+			kb, err := strconv.ParseInt(strings.Fields(line)[1], 10, 64)
+			assert.NoError(t, err)
+			return kb * 1024
+		}
+	}
+	t.Fatal("VmRSS not found in /proc/self/status")
+	return 0
+}
+
+func collectGarbage() {
+	for i := 0; i < 5; i++ {
+		runtime.GC()
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func TestNewSourceMapCacheFreesItsInputs(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("reads memory from /proc/self/status")
+	}
+
+	minified, err := os.ReadFile("symbolic/symbolic-testutils/fixtures/sourcemapcache/simple/minified.js")
+	assert.NoError(t, err)
+	sourceMap, err := os.ReadFile("symbolic/symbolic-testutils/fixtures/sourcemapcache/simple/minified.js.map")
+	assert.NoError(t, err)
+
+	source := string(minified) + strings.Repeat(" ", 4<<20)
+
+	collectGarbage()
+	before := residentMemory(t)
+	for i := 0; i < 50; i++ {
+		smc, err := NewSourceMapCache(source, string(sourceMap))
+		assert.NoError(t, err)
+		_, err = smc.Lookup(1, 11, 0)
+		assert.NoError(t, err)
+	}
+	collectGarbage()
+
+	assert.Less(t, residentMemory(t)-before, int64(50<<20))
 }
 
 type TestCase struct {

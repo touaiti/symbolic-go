@@ -1,6 +1,8 @@
 # symbolic-go changelog
 
 ## Unreleased
+### Maintenance
+- fix: free the C copies of the source and source map in `NewSourceMapCache` (memory leak on every source map load)
 
 ## 0.0.8
 ### Maintenance

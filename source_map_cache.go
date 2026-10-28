@@ -1,6 +1,7 @@
 package symbolic
 
 /*
+#include <stdlib.h>
 #include <string.h>
 #include "include/symbolic.h"
 */
@@ -16,7 +17,9 @@ type SourceMapCache struct {
 
 func NewSourceMapCache(source, sourceMap string) (*SourceMapCache, error) {
 	cs := C.CString(source)
+	defer C.free(unsafe.Pointer(cs))
 	csm := C.CString(sourceMap)
+	defer C.free(unsafe.Pointer(csm))
 
 	C.symbolic_err_clear()
 	ssmc := C.symbolic_sourcemapcache_from_bytes(cs, C.strlen(cs), csm, C.strlen(csm))
